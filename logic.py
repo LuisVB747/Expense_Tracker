@@ -34,22 +34,21 @@ app = Flask(__name__)
 
 # Production-ready CORS setup
 if os.environ.get('FLASK_ENV') == 'production':
-    # In production, only allow your frontend domain
     CORS(app, resources={r"/api/*": {"origins": "https://ldexpensetracker.netlify.app"}}, supports_credentials=True)
-
 else:
-    # In development, allow localhost
     CORS(app, supports_credentials=True, origins=['http://localhost:3000'])
+
 
 # Secret key for sessions (uses environment variable in production)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
 
 
 def get_session_id():
-    """Get or create a session ID for the current user"""
     if 'session_id' not in session:
         session['session_id'] = str(uuid.uuid4())
+        session.modified = True  # Force cookie to update
     return session['session_id']
+
 
 
 # API Routes for React frontend
@@ -219,7 +218,9 @@ if __name__ == "__main__":
     # Use environment variable for port (required for deployment platforms)
     port = int(os.environ.get('PORT', 5000))
     app.config.update(
-    SESSION_COOKIE_SAMESITE="None",
-    SESSION_COOKIE_SECURE=True,
+    SECRET_KEY=os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production'),
+    SESSION_COOKIE_SECURE=True,           # True if your site uses HTTPS (production), False for localhost HTTP
+    SESSION_COOKIE_SAMESITE='None',       # 'None' needed to allow cross-site cookies with CORS + credentials
+    SESSION_COOKIE_HTTPONLY=True,
 )
     app.run(host='0.0.0.0', port=port, debug=False)
