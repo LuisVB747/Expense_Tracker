@@ -196,10 +196,6 @@ def api_reset():
 def health_check():
     return jsonify({'status': 'healthy'})
 
-@app.route("/api/debug_session")
-def debug_session():
-    session_id = get_session_id()
-    return jsonify({'session_id': session_id})
 
 # Original HTML routes (updated for sessions)
 @app.route('/')
@@ -220,12 +216,10 @@ def index():
 
 if __name__ == "__main__":
     init_db()
+    # Use environment variable for port (required for deployment platforms)
     port = int(os.environ.get('PORT', 5000))
-    
     app.config.update(
-        SESSION_COOKIE_SECURE=True,      # True if HTTPS (like on Render)
-        SESSION_COOKIE_SAMESITE='None',  # Needed for cross-site cookies
-        SESSION_COOKIE_HTTPONLY=True
-    )
-    
+    SESSION_COOKIE_SAMESITE="None",
+    SESSION_COOKIE_SECURE=True,
+)
     app.run(host='0.0.0.0', port=port, debug=False)
