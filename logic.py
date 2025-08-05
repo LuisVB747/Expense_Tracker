@@ -35,7 +35,7 @@ app = Flask(__name__)
 # Production-ready CORS setup
 if os.environ.get('FLASK_ENV') == 'production':
     # In production, only allow your frontend domain
-    CORS(app, supports_credentials=True, origins=['https://your-app-name.netlify.app'])
+    CORS(app, supports_credentials=True, origins=['https://ldexpensetracker.netlify.app/'])
 else:
     # In development, allow localhost
     CORS(app, supports_credentials=True, origins=['http://localhost:3000'])
