@@ -196,6 +196,10 @@ def api_reset():
 def health_check():
     return jsonify({'status': 'healthy'})
 
+@app.route("/api/debug_session")
+def debug_session():
+    session_id = get_session_id()
+    return jsonify({'session_id': session_id})
 
 # Original HTML routes (updated for sessions)
 @app.route('/')
