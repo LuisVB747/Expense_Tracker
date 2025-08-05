@@ -1,25 +1,28 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 from flask_cors import CORS
 import sqlite3
-
+import uuid
+import os
 
 
 def init_db():
     connection = sqlite3.connect('expenses.db')
     cursor = connection.cursor()
 
-    # Create expenses table
+    # Create expenses table with session_id
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
             amount REAL,
             category TEXT
         )''')
 
-    # Create budget table
+    # Create budget table with session_id
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS budget (
-            id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
             amount REAL
         )''')
 
@@ -28,34 +31,54 @@ def init_db():
 
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+
+# Production-ready CORS setup
+if os.environ.get('FLASK_ENV') == 'production':
+    # In production, only allow your frontend domain
+    CORS(app, supports_credentials=True, origins=['https://your-app-name.netlify.app'])
+else:
+    # In development, allow localhost
+    CORS(app, supports_credentials=True, origins=['http://localhost:3000'])
+
+# Secret key for sessions (uses environment variable in production)
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
+
+
+def get_session_id():
+    """Get or create a session ID for the current user"""
+    if 'session_id' not in session:
+        session['session_id'] = str(uuid.uuid4())
+    return session['session_id']
 
 
 # API Routes for React frontend
 @app.route('/api/summary', methods=['GET'])
 def api_summary():
+    session_id = get_session_id()
+    
     connection = sqlite3.connect('expenses.db')
     cursor = connection.cursor()
 
-    # Get all expenses
-    cursor.execute('SELECT * FROM expenses')
+    # Get all expenses for this session
+    cursor.execute('SELECT * FROM expenses WHERE session_id = ?', (session_id,))
     expenses = cursor.fetchall()
 
     # Calculate total expenses
-    total_expenses = sum(expense[1] for expense in expenses)
+    total_expenses = sum(expense[2] for expense in expenses)  # expense[2] is amount
 
-    # Get budget
-    cursor.execute('SELECT amount FROM budget WHERE id = 1')
+    # Get budget for this session
+    cursor.execute('SELECT amount FROM budget WHERE session_id = ? ORDER BY id DESC LIMIT 1', (session_id,))
     budget_row = cursor.fetchone()
     budget = budget_row[0] if budget_row else 0
 
     connection.close()
 
     return jsonify({
-        'expenses': expenses,
+        'expenses': [[e[0], e[2], e[3]] for e in expenses],  # [id, amount, category]
         'total_expenses': total_expenses,
         'budget': budget
     })
+
 
 @app.route('/api/categories', methods=['GET'])
 def api_categories():
@@ -72,35 +95,40 @@ def api_categories():
     
     return jsonify({'categories': categories})
 
+
 @app.route('/api/set_budget', methods=['POST'])
 def api_set_budget():
+    session_id = get_session_id()
     data = request.get_json()
     budget = data['budget']
 
     connection = sqlite3.connect('expenses.db')
     cursor = connection.cursor()
 
-    # Check if budget entry exists
-    cursor.execute('SELECT id FROM budget WHERE id = 1')
+    # Check if budget entry exists for this session
+    cursor.execute('SELECT id FROM budget WHERE session_id = ?', (session_id,))
     budget_entry = cursor.fetchone()
 
     if budget_entry is None:
-        cursor.execute('INSERT INTO budget (id, amount) VALUES (1, ?)', (budget,))
+        cursor.execute('INSERT INTO budget (session_id, amount) VALUES (?, ?)', (session_id, budget))
     else:
-        cursor.execute('UPDATE budget SET amount = ? WHERE id = 1', (budget,))
+        cursor.execute('UPDATE budget SET amount = ? WHERE session_id = ?', (budget, session_id))
 
     connection.commit()
     connection.close()
 
     return jsonify({'success': True})
 
+
 @app.route('/api/reset_budget', methods=['POST'])
 def api_reset_budget():
+    session_id = get_session_id()
+    
     connection = sqlite3.connect('expenses.db')
     cursor = connection.cursor()
 
-    # Reset budget
-    cursor.execute('DELETE FROM budget')
+    # Reset budget for this session only
+    cursor.execute('DELETE FROM budget WHERE session_id = ?', (session_id,))
 
     connection.commit()
     connection.close()
@@ -110,13 +138,15 @@ def api_reset_budget():
 
 @app.route('/api/add_expense', methods=['POST'])
 def api_add_expense():
+    session_id = get_session_id()
     data = request.get_json()
     amount = data['amount']
     category = data['category']
 
     connection = sqlite3.connect('expenses.db')
     cursor = connection.cursor()
-    cursor.execute('INSERT INTO expenses (amount, category) VALUES (?, ?)', (amount, category))
+    cursor.execute('INSERT INTO expenses (session_id, amount, category) VALUES (?, ?, ?)', 
+                   (session_id, amount, category))
     connection.commit()
     connection.close()
 
@@ -125,11 +155,13 @@ def api_add_expense():
 
 @app.route('/api/reset', methods=['POST'])
 def api_reset():
+    session_id = get_session_id()
+    
     connection = sqlite3.connect('expenses.db')
     cursor = connection.cursor()
 
-    # Delete all expenses but keep budget
-    cursor.execute('DELETE FROM expenses')
+    # Delete all expenses for this session only
+    cursor.execute('DELETE FROM expenses WHERE session_id = ?', (session_id,))
 
     connection.commit()
     connection.close()
@@ -137,62 +169,31 @@ def api_reset():
     return jsonify({'success': True})
 
 
-# Original HTML routes (keep these if you want to use templates too)
+# Health check endpoint for deployment platforms
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'healthy'})
+
+
+# Original HTML routes (updated for sessions)
 @app.route('/')
 def index():
+    session_id = get_session_id()
+    
     connection = sqlite3.connect('expenses.db')
     cursor = connection.cursor()
-    cursor.execute('SELECT * FROM expenses')
+    cursor.execute('SELECT * FROM expenses WHERE session_id = ?', (session_id,))
     expenses = cursor.fetchall()
-    total_expenses = sum(expense[1] for expense in expenses)
-    cursor.execute('SELECT amount FROM budget WHERE id = 1')
+    total_expenses = sum(expense[2] for expense in expenses)
+    cursor.execute('SELECT amount FROM budget WHERE session_id = ? ORDER BY id DESC LIMIT 1', (session_id,))
     budget_row = cursor.fetchone()
     budget = budget_row[0] if budget_row else 0
     connection.close()
     return render_template('index.html', expenses=expenses, total_expenses=total_expenses, budget=budget)
 
 
-@app.route('/set_budget', methods=['POST'])
-def set_budget():
-    budget = request.form['budget']
-    connection = sqlite3.connect('expenses.db')
-    cursor = connection.cursor()
-
-    cursor.execute('SELECT id FROM budget WHERE id = 1')
-    budget_entry = cursor.fetchone()
-
-    if budget_entry is None:
-        cursor.execute('INSERT INTO budget (id, amount) VALUES (1, ?)', (budget,))
-    else:
-        cursor.execute('UPDATE budget SET amount = ? WHERE id = 1', (budget,))
-
-    connection.commit()
-    connection.close()
-    return redirect(url_for('index'))
-
-
-@app.route('/add', methods=['POST'])
-def add_expense():
-    amount = request.form['amount']
-    category = request.form['category']
-    connection = sqlite3.connect('expenses.db')
-    cursor = connection.cursor()
-    cursor.execute('INSERT INTO expenses (amount, category) VALUES (?, ?)', (amount, category))
-    connection.commit()
-    connection.close()
-    return redirect(url_for('index'))
-
-
-@app.route('/reset_all', methods=['POST'])
-def reset_all():
-    connection = sqlite3.connect('expenses.db')
-    cursor = connection.cursor()
-    cursor.execute('DELETE FROM expenses')
-    connection.commit()
-    connection.close()
-    return redirect(url_for('index'))
-
-
 if __name__ == "__main__":
     init_db()
-    app.run(debug=True)
+    # Use environment variable for port (required for deployment platforms)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
