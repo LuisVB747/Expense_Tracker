@@ -2,8 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify
 from flask_cors import CORS
 import sqlite3
 
-categories = [
-    'Food', 'Transport', 'Entertainment', 'Utilities', 'Healthcare', 'Education', 'Other']
+
 
 def init_db():
     connection = sqlite3.connect('expenses.db')
@@ -58,6 +57,20 @@ def api_summary():
         'budget': budget
     })
 
+@app.route('/api/categories', methods=['GET'])
+def api_categories():
+    # Define your categories list
+    categories = [
+        "Food",
+        "Transportation", 
+        "Entertainment",
+        "Utilities",
+        "Shopping",
+        "Healthcare",
+        "Other"
+    ]
+    
+    return jsonify({'categories': categories})
 
 @app.route('/api/set_budget', methods=['POST'])
 def api_set_budget():
