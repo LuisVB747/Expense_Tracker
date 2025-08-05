@@ -140,13 +140,15 @@ def api_reset_budget():
 def api_add_expense():
     session_id = get_session_id()
     data = request.get_json()
-    amount = data['amount']
-    category = data['category']
+    amount = float(data.get('amount'))
+    category = data.get('category')
+    if not category:
+        raise ValueError("Missing category")
 
     connection = sqlite3.connect('expenses.db')
     cursor = connection.cursor()
     cursor.execute('INSERT INTO expenses (session_id, amount, category) VALUES (?, ?, ?)', 
-                   (session_id, amount, category))
+                    (session_id, amount, category))
     connection.commit()
     connection.close()
 
