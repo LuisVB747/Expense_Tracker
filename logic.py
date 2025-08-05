@@ -218,4 +218,8 @@ if __name__ == "__main__":
     init_db()
     # Use environment variable for port (required for deployment platforms)
     port = int(os.environ.get('PORT', 5000))
+    app.config.update(
+    SESSION_COOKIE_SAMESITE="None",
+    SESSION_COOKIE_SECURE=True,
+)
     app.run(host='0.0.0.0', port=port, debug=False)
