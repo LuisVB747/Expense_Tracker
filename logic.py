@@ -140,20 +140,38 @@ def api_reset_budget():
 @app.route('/api/add_expense', methods=['POST'])
 def api_add_expense():
     session_id = get_session_id()
-    data = request.get_json()
-    amount = float(data.get('amount'))
-    category = data.get('category')
-    if not category:
-        raise ValueError("Missing category")
+    
+    try:
+        data = request.get_json()
+        print("📦 Received data for new expense:", data)
 
-    connection = sqlite3.connect('expenses.db')
-    cursor = connection.cursor()
-    cursor.execute('INSERT INTO expenses (session_id, amount, category) VALUES (?, ?, ?)', 
-                    (session_id, amount, category))
-    connection.commit()
-    connection.close()
+        if data is None:
+            raise ValueError("No JSON payload received")
 
-    return jsonify({'success': True})
+        amount = float(data.get('amount'))
+        category = data.get('category')
+        if not category:
+            raise ValueError("Missing category")
+
+        print(f"Debug insert values: session_id={session_id}, amount={amount}, category={category}")
+
+        connection = sqlite3.connect('expenses.db')
+        cursor = connection.cursor()
+        cursor.execute(
+            'INSERT INTO expenses (session_id, amount, category) VALUES (?, ?, ?)', 
+            (session_id, amount, category)
+        )
+        connection.commit()
+        connection.close()
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print("❌ Error in /api/add_expense:", e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 
 @app.route('/api/reset', methods=['POST'])
