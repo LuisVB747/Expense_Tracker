@@ -120,7 +120,15 @@ def api_set_budget():
 
     return jsonify({'success': True})
 
-
+@app.route('/reinit_db')
+def reinit_db():
+    try:
+        os.remove('expenses.db')
+        init_db()
+        return "DB reset and reinitialized!"
+    except Exception as e:
+        return f"Error resetting DB: {e}"
+    
 @app.route('/api/reset_budget', methods=['POST'])
 def api_reset_budget():
     session_id = get_session_id()
